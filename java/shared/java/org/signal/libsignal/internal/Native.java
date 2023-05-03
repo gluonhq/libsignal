@@ -545,4 +545,6 @@ public final class Native {
   public static native boolean ValidatingMac_Finalize(long mac);
   public static native long ValidatingMac_Initialize(byte[] key, int chunkSize, byte[] digests);
   public static native boolean ValidatingMac_Update(long mac, byte[] bytes, int offset, int length);
+
+  public static native byte[] Grpc_SendMessage(String method, String urlFragment, byte[] body);
 }

@@ -3,6 +3,7 @@ members = [
     "rust/attest",
     "rust/crypto",
     "rust/device-transfer",
+    "rust/grpc",
     "rust/media",
     "rust/pin",
     "rust/poksho",
@@ -17,6 +18,7 @@ members = [
 default-members = [
     "rust/crypto",
     "rust/device-transfer",
+    "rust/grpc",
     "rust/media",
     "rust/pin",
     "rust/poksho",
@@ -24,6 +26,7 @@ default-members = [
     "rust/usernames",
     "rust/zkcredential",
     "rust/zkgroup",
+    "rust/bridge/jni",
 ]
 resolver = "2" # so that our dev-dependency features don't leak into products
 
