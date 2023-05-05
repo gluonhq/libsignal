@@ -23,6 +23,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.file.Files;
+import java.util.List;
 import java.util.UUID;
 import java.util.Map;
 
@@ -546,5 +547,5 @@ public final class Native {
   public static native long ValidatingMac_Initialize(byte[] key, int chunkSize, byte[] digests);
   public static native boolean ValidatingMac_Update(long mac, byte[] bytes, int offset, int length);
 
-  public static native byte[] Grpc_SendMessage(String method, String urlFragment, byte[] body);
+  public static native byte[] Grpc_SendMessage(String method, String urlFragment, byte[] body, Map<String, List<String>> headers);
 }
