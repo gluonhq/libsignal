@@ -70,6 +70,10 @@ def getGithubReleasesAccountName() {
             : "libsignal"
 }
 
+def isSkipSigning() {
+    return hasProperty('skipSigning')
+}
+
 def isReleaseBuild() {
     return version.contains("SNAPSHOT") == false
 }
