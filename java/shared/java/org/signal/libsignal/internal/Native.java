@@ -7,6 +7,8 @@
 
 package org.signal.libsignal.internal;
 
+import org.signal.libsignal.grpc.GrpcReplyListener;
+import org.signal.libsignal.grpc.SignalRpcReply;
 import org.signal.libsignal.protocol.message.CiphertextMessage;
 import org.signal.libsignal.protocol.state.IdentityKeyStore;
 import org.signal.libsignal.protocol.state.SessionStore;
@@ -547,5 +549,6 @@ public final class Native {
   public static native long ValidatingMac_Initialize(byte[] key, int chunkSize, byte[] digests);
   public static native boolean ValidatingMac_Update(long mac, byte[] bytes, int offset, int length);
 
-  public static native byte[] Grpc_SendMessage(String method, String urlFragment, byte[] body, Map<String, List<String>> headers);
+  public static native void Grpc_OpenStream(String uri, Map<String, List<String>> headers, GrpcReplyListener listener);
+  public static native SignalRpcReply Grpc_SendMessage(String method, String urlFragment, byte[] body, Map<String, List<String>> headers);
 }
