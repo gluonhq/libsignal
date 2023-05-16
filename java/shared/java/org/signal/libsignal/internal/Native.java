@@ -549,6 +549,8 @@ public final class Native {
   public static native long ValidatingMac_Initialize(byte[] key, int chunkSize, byte[] digests);
   public static native boolean ValidatingMac_Update(long mac, byte[] bytes, int offset, int length);
 
-  public static native void Grpc_OpenStream(String uri, Map<String, List<String>> headers, GrpcReplyListener listener);
-  public static native SignalRpcReply Grpc_SendMessage(String method, String urlFragment, byte[] body, Map<String, List<String>> headers);
+  public static native long GrpcClient_New(String target);
+  public static native void GrpcClient_Destroy(long handle);
+  public static native long GrpcClient_OpenStream(long cli, String uri, Map<String, List<String>> headers, GrpcReplyListener listener);
+  public static native void GrpcClient_SendMessage(long cli, String method, String urlFragment, byte[] body, Map<String, List<String>> headers);
 }
