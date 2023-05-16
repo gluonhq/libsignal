@@ -232,6 +232,7 @@ fn throw_error(env: &JNIEnv, error: SignalJniError) {
         SignalJniError::NullHandle => jni_class_name!(java.lang.NullPointerException),
 
         SignalJniError::Signal(SignalProtocolError::InvalidState(_, _))
+        | SignalJniError::Grpc(GrpcError::StreamNotOpened())
         | SignalJniError::SignalCrypto(SignalCryptoError::InvalidState) => {
             jni_class_name!(java.lang.IllegalStateException)
         }
@@ -250,7 +251,7 @@ fn throw_error(env: &JNIEnv, error: SignalJniError) {
         | SignalJniError::Signal(SignalProtocolError::FfiBindingError(_))
         | SignalJniError::DeviceTransfer(DeviceTransferError::InternalError(_))
         | SignalJniError::DeviceTransfer(DeviceTransferError::KeyDecodingFailed)
-        | SignalJniError::Grpc(_) => {
+        | SignalJniError::Grpc(GrpcError::InvalidArgument(_)) => {
             jni_class_name!(java.lang.RuntimeException)
         }
 
