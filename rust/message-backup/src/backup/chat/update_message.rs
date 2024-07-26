@@ -12,7 +12,7 @@ use crate::backup::{TryFromWith, TryIntoWith as _};
 use crate::proto::backup as proto;
 
 /// Validated version of [`proto::chat_update_message::Update`].
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize)]
 #[cfg_attr(test, derive(PartialEq))]
 pub enum UpdateMessage<Recipient> {
     Simple(SimpleChatUpdate),
@@ -27,7 +27,7 @@ pub enum UpdateMessage<Recipient> {
 }
 
 /// Validated version of [`proto::simple_chat_update::Type`].
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize)]
 #[cfg_attr(test, derive(PartialEq))]
 pub enum SimpleChatUpdate {
     JoinedSignal,
@@ -117,7 +117,7 @@ impl<C: Lookup<RecipientId, R>, R: Clone> TryFromWith<proto::ChatUpdateMessage, 
                 expiresInMs,
                 special_fields: _,
             }) => UpdateMessage::ExpirationTimerChange {
-                expires_in: Duration::from_millis(expiresInMs.into()),
+                expires_in: Duration::from_millis(expiresInMs),
             },
             Update::ProfileChange(proto::ProfileChangeChatUpdate {
                 previousName,

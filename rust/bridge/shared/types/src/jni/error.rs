@@ -56,6 +56,7 @@ pub enum SignalJniError {
     ChatService(ChatServiceError),
     InvalidUri(InvalidUri),
     ConnectTimedOut,
+    BackupValidation(#[from] libsignal_message_backup::ReadError),
     Bridge(BridgeLayerError),
     TestingError {
         exception_class: ClassName<'static>,
@@ -106,6 +107,7 @@ impl fmt::Display for SignalJniError {
             SignalJniError::InvalidUri(e) => write!(f, "{}", e),
             SignalJniError::WebSocket(e) => write!(f, "{e}"),
             SignalJniError::ConnectTimedOut => write!(f, "connect timed out"),
+            SignalJniError::BackupValidation(e) => write!(f, "{}", e),
             SignalJniError::Svr3(e) => write!(f, "{}", e),
             SignalJniError::Bridge(e) => write!(f, "{}", e),
             SignalJniError::TestingError { exception_class } => {

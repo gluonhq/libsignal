@@ -17,12 +17,13 @@ use attest::svr2::RaftConfig;
 use base64::prelude::{Engine, BASE64_STANDARD};
 use clap::Parser;
 use hex_literal::hex;
+use libsignal_net::utils::ObservableEvent;
 use nonzero_ext::nonzero;
 use rand_core::{CryptoRngCore, OsRng, RngCore};
 
 use libsignal_net::auth::Auth;
 use libsignal_net::enclave::{
-    EnclaveEndpoint, EnclaveEndpointConnection, EndpointParams, Error, MrEnclave, PpssSetup, Sgx,
+    self, EnclaveEndpoint, EnclaveEndpointConnection, EndpointParams, MrEnclave, PpssSetup, Sgx,
     Svr3Flavor,
 };
 use libsignal_net::env::{DomainConfig, PROXY_CONFIG_F_STAGING, PROXY_CONFIG_G};
@@ -31,7 +32,8 @@ use libsignal_net::infra::dns::DnsResolver;
 use libsignal_net::infra::tcp_ssl::DirectConnector as TcpSslTransportConnector;
 use libsignal_net::infra::TransportConnector;
 use libsignal_net::svr::SvrConnection;
-use libsignal_net::svr3::{OpaqueMaskedShareSet, Svr3Client as _, Svr3Connect};
+use libsignal_net::svr3::traits::*;
+use libsignal_net::svr3::OpaqueMaskedShareSet;
 
 const TEST_SERVER_CERT: RootCertificates = RootCertificates::FromDer(Cow::Borrowed(
     include_bytes!("../res/sgx_test_server_cert.cer"),
@@ -72,7 +74,10 @@ where
     S: Send,
 {
     type Stream = <TcpSslTransportConnector as TransportConnector>::Stream;
-    type Connections = (SvrConnection<A, S>, SvrConnection<B, S>);
+    type ConnectionResults = (
+        Result<SvrConnection<A, S>, enclave::Error>,
+        Result<SvrConnection<B, S>, enclave::Error>,
+    );
     type ServerIds = [u64; 2];
 
     fn server_ids() -> Self::ServerIds {
@@ -101,17 +106,17 @@ impl Svr3Connect for Client {
     type Stream = <TcpSslTransportConnector as TransportConnector>::Stream;
     type Env = TwoForTwoEnv<'static, Sgx, Sgx>;
 
-    async fn connect(&self) -> Result<<Self::Env as PpssSetup<Self::Stream>>::Connections, Error> {
-        let connector = TcpSslTransportConnector::new(DnsResolver::default());
+    async fn connect(&self) -> <Self::Env as PpssSetup<Self::Stream>>::ConnectionResults {
+        let connector =
+            TcpSslTransportConnector::new(DnsResolver::new(&ObservableEvent::default()));
         let connection_a = EnclaveEndpointConnection::new(&self.env.0, Duration::from_secs(10));
 
-        let a =
-            SvrConnection::connect(self.auth_a.clone(), &connection_a, connector.clone()).await?;
+        let a = SvrConnection::connect(self.auth_a.clone(), &connection_a, connector.clone()).await;
 
         let connection_b = EnclaveEndpointConnection::new(&self.env.1, Duration::from_secs(10));
 
-        let b = SvrConnection::connect(self.auth_b.clone(), &connection_b, connector).await?;
-        Ok((a, b))
+        let b = SvrConnection::connect(self.auth_b.clone(), &connection_b, connector).await;
+        (a, b)
     }
 }
 

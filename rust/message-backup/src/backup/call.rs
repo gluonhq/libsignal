@@ -3,15 +3,17 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
 
+use std::fmt::Debug;
+
 use crate::backup::frame::{RecipientId, RingerRecipientId};
-use crate::backup::method::{Contains, Lookup};
+use crate::backup::method::{Contains, Lookup, LookupPair};
 use crate::backup::recipient::DestinationKind;
 use crate::backup::time::Timestamp;
 use crate::backup::TryFromWith;
 use crate::proto::backup as proto;
 
 /// Validated version of [`proto::AdHocCall`].
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize)]
 #[cfg_attr(test, derive(PartialEq))]
 pub struct AdHocCall<Recipient> {
     pub id: CallId,
@@ -20,7 +22,7 @@ pub struct AdHocCall<Recipient> {
 }
 
 /// Validated version of [`proto::IndividualCall`].
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize)]
 #[cfg_attr(test, derive(PartialEq))]
 pub struct IndividualCall {
     pub id: Option<CallId>,
@@ -31,7 +33,7 @@ pub struct IndividualCall {
 }
 
 /// Validated version of [`proto::GroupCall`].
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize)]
 #[cfg_attr(test, derive(PartialEq))]
 pub struct GroupCall<Recipient> {
     pub id: Option<CallId>,
@@ -45,7 +47,7 @@ pub struct GroupCall<Recipient> {
 ///
 /// This is not referenced as a foreign key from elsewhere in a backup, but
 /// corresponds to shared state across conversation members for a given call.
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord, serde::Serialize)]
 pub struct CallId(u64);
 
 #[derive(Debug, displaydoc::Display, thiserror::Error)]
@@ -78,14 +80,14 @@ pub enum CallLinkError {
     InvalidRootKey(usize),
 }
 
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize)]
 #[cfg_attr(test, derive(PartialEq))]
 pub enum CallType {
     Audio,
     Video,
 }
 
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize)]
 #[cfg_attr(test, derive(PartialEq))]
 pub enum IndividualCallState {
     Accepted,
@@ -94,7 +96,7 @@ pub enum IndividualCallState {
     Missed,
 }
 
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize)]
 #[cfg_attr(test, derive(PartialEq))]
 pub enum GroupCallState {
     /// No ring
@@ -122,7 +124,7 @@ const CALL_LINK_ROOT_KEY_LEN: usize = 16;
 type CallLinkRootKey = [u8; CALL_LINK_ROOT_KEY_LEN];
 
 /// Validated version of [`proto::CallLink`].
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize)]
 #[cfg_attr(test, derive(PartialEq))]
 pub struct CallLink {
     pub admin_approval: bool,
@@ -253,8 +255,8 @@ impl<C: Contains<RecipientId> + Lookup<RecipientId, R>, R: Clone> TryFromWith<pr
     }
 }
 
-impl<C: Lookup<RecipientId, DestinationKind>> TryFromWith<proto::AdHocCall, C>
-    for AdHocCall<RecipientId>
+impl<C: LookupPair<RecipientId, DestinationKind, R>, R: Clone + Debug>
+    TryFromWith<proto::AdHocCall, C> for AdHocCall<R>
 {
     type Error = CallError;
 
@@ -271,17 +273,17 @@ impl<C: Lookup<RecipientId, DestinationKind>> TryFromWith<proto::AdHocCall, C>
 
         let recipient = RecipientId(recipientId);
 
-        match context.lookup(&recipient) {
-            None => return Err(CallError::NoAdHocRecipient(recipient)),
-            Some(DestinationKind::CallLink) => (),
-            Some(
-                DestinationKind::Contact
-                | DestinationKind::DistributionList
-                | DestinationKind::Group
-                | DestinationKind::ReleaseNotes
-                | DestinationKind::Self_,
-            ) => return Err(CallError::InvalidAdHocRecipient(recipient)),
-        }
+        let (kind, reference) = context
+            .lookup_pair(&recipient)
+            .ok_or(CallError::NoAdHocRecipient(recipient))?;
+        let recipient = match kind {
+            DestinationKind::CallLink => reference.clone(),
+            DestinationKind::Contact
+            | DestinationKind::DistributionList
+            | DestinationKind::Group
+            | DestinationKind::ReleaseNotes
+            | DestinationKind::Self_ => return Err(CallError::InvalidAdHocRecipient(recipient)),
+        };
 
         {
             use proto::ad_hoc_call::State;
@@ -431,6 +433,19 @@ pub(crate) mod test {
             match key {
                 RecipientId(proto::Recipient::TEST_ID) => Some(&DestinationKind::Contact),
                 &TEST_CALL_LINK_RECIPIENT_ID => Some(&DestinationKind::CallLink),
+                _ => None,
+            }
+        }
+    }
+
+    impl LookupPair<RecipientId, DestinationKind, RecipientId> for TestContext {
+        fn lookup_pair<'a>(
+            &'a self,
+            key: &'a RecipientId,
+        ) -> Option<(&'a DestinationKind, &'a RecipientId)> {
+            match key {
+                RecipientId(proto::Recipient::TEST_ID) => Some((&DestinationKind::Contact, key)),
+                &TEST_CALL_LINK_RECIPIENT_ID => Some((&DestinationKind::CallLink, key)),
                 _ => None,
             }
         }

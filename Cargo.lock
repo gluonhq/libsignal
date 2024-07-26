@@ -1075,6 +1075,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "diff"
+version = "0.1.13"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "56254986775e3233ffa9c4d7d3faaf6d36a2c09d30b20687e9f88bc8bafc16c8"
+
+[[package]]
 name = "difflib"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2101,6 +2107,7 @@ dependencies = [
 name = "libsignal-bridge-testing"
 version = "0.1.0"
 dependencies = [
+ "displaydoc",
  "futures-util",
  "jni 0.21.1",
  "libsignal-bridge-macros",
@@ -2113,6 +2120,7 @@ dependencies = [
  "signal-neon-futures",
  "strum",
  "thiserror",
+ "tokio",
 ]
 
 [[package]]
@@ -2191,7 +2199,7 @@ dependencies = [
 
 [[package]]
 name = "libsignal-ffi"
-version = "0.52.3"
+version = "0.53.0"
 dependencies = [
  "cpufeatures",
  "futures-util",
@@ -2206,7 +2214,7 @@ dependencies = [
 
 [[package]]
 name = "libsignal-jni"
-version = "0.52.3"
+version = "0.53.0"
 dependencies = [
  "cfg-if",
  "cpufeatures",
@@ -2222,7 +2230,7 @@ dependencies = [
 
 [[package]]
 name = "libsignal-jni-testing"
-version = "0.52.3"
+version = "0.53.0"
 dependencies = [
  "async-trait",
  "cfg-if",
@@ -2267,9 +2275,11 @@ dependencies = [
  "nonzero_ext",
  "num_enum",
  "once_cell",
+ "pretty_assertions",
  "protobuf",
  "protobuf-codegen",
  "protobuf-json-mapping",
+ "serde",
  "serde_json",
  "sha2",
  "signal-crypto",
@@ -2326,6 +2336,7 @@ dependencies = [
  "http-body-util",
  "hyper 1.4.1",
  "hyper-util",
+ "indexmap 2.2.6",
  "itertools 0.12.1",
  "lazy_static",
  "libsignal-core",
@@ -2365,7 +2376,7 @@ dependencies = [
 
 [[package]]
 name = "libsignal-node"
-version = "0.52.3"
+version = "0.53.0"
 dependencies = [
  "cmake",
  "futures",
@@ -3258,6 +3269,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "pretty_assertions"
+version = "1.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "af7cee1a6c8a5b9208b3cb1061f10c0cb689087b3d8ce85fb9d2dd7a29b6ba66"
+dependencies = [
+ "diff",
+ "yansi",
+]
+
+[[package]]
 name = "prettyplease"
 version = "0.2.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3890,6 +3911,7 @@ version = "1.0.120"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4e0d21c9a8cae1235ad58a00c11cb40d4b1e5c784f1ef2c537876ed6ffd8b7c5"
 dependencies = [
+ "indexmap 2.2.6",
  "itoa",
  "ryu",
  "serde",
@@ -4799,6 +4821,7 @@ version = "1.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "81dfa00651efa65069b0b6b651f4aaa31ba9e3c3ce0137aaad053604ee7e0314"
 dependencies = [
+ "serde",
  "sha1_smol",
 ]
 
@@ -5248,6 +5271,12 @@ dependencies = [
  "serde",
  "zeroize",
 ]
+
+[[package]]
+name = "yansi"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "09041cd90cf85f7f8b2df60c646f853b7f535ce68f85244eb6731cf89fa498ec"
 
 [[package]]
 name = "yasna"

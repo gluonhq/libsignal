@@ -15,10 +15,11 @@ use zkgroup::ProfileKeyBytes;
 use crate::backup::chat::chat_style::{ChatStyle, ChatStyleError, CustomColorMap};
 use crate::backup::method::Method;
 use crate::backup::time::Duration;
-use crate::backup::{ReferencedTypes, TryIntoWith as _};
+use crate::backup::{serialize, ReferencedTypes, TryIntoWith as _};
 use crate::proto::backup as proto;
 
 #[derive_where(Debug)]
+#[derive(serde::Serialize)]
 #[cfg_attr(test, derive_where(PartialEq;
     M::Value<ProfileKeyBytes>: PartialEq,
     M::Value<Option<UsernameData>>: PartialEq,
@@ -27,6 +28,10 @@ use crate::proto::backup as proto;
     AccountSettings<M>: PartialEq,
 ))]
 pub struct AccountData<M: Method + ReferencedTypes> {
+    #[serde(
+        with = "hex",
+        bound(serialize = "M::Value<ProfileKeyBytes>: AsRef<[u8]>")
+    )]
     pub profile_key: M::Value<ProfileKeyBytes>,
     pub username: M::Value<Option<UsernameData>>,
     pub given_name: M::Value<String>,
@@ -37,24 +42,29 @@ pub struct AccountData<M: Method + ReferencedTypes> {
     pub backup_subscription: M::Value<Option<Subscription>>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize)]
 #[cfg_attr(test, derive(PartialEq))]
 pub struct UsernameData {
+    #[serde(serialize_with = "serialize::to_string")]
     pub username: Username,
     pub link: Option<UsernameLink>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize)]
 #[cfg_attr(test, derive(PartialEq))]
 pub struct UsernameLink {
+    #[serde(serialize_with = "serialize::enum_as_string")]
     pub color: crate::proto::backup::account_data::username_link::Color,
+    #[serde(serialize_with = "hex::serialize")]
     pub entropy: [u8; USERNAME_LINK_ENTROPY_SIZE],
+    #[serde(serialize_with = "serialize::to_string")]
     pub server_id: Uuid,
 }
 
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize)]
 #[cfg_attr(test, derive(PartialEq))]
 pub struct Subscription {
+    #[serde(with = "hex")]
     pub subscriber_id: SubscriberId,
     pub currency_code: String,
     pub manually_canceled: bool,
@@ -64,6 +74,7 @@ const SUBSCRIBER_ID_LENGTH: usize = 32;
 type SubscriberId = [u8; SUBSCRIBER_ID_LENGTH];
 
 #[derive_where(Debug)]
+#[derive(serde::Serialize)]
 #[cfg_attr(test, derive_where(PartialEq;
     M::Value<PhoneSharing>: PartialEq,
     M::Value<Option<bool>>: PartialEq,
@@ -95,7 +106,7 @@ pub struct AccountSettings<M: Method + ReferencedTypes> {
     pub custom_chat_colors: CustomColorMap<M>,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, serde::Serialize)]
 pub enum PhoneSharing {
     WithEverybody,
     WithNobody,
@@ -283,7 +294,7 @@ impl<M: Method + ReferencedTypes> TryFrom<proto::account_data::AccountSettings>
             storyViewReceiptsEnabled,
             hasSeenGroupStoryEducationSheet,
             hasCompletedUsernameOnboarding,
-            universalExpireTimer,
+            universalExpireTimerSeconds,
             preferredReactionEmoji,
             defaultChatStyle,
             customChatColors,
@@ -306,8 +317,8 @@ impl<M: Method + ReferencedTypes> TryFrom<proto::account_data::AccountSettings>
             .map(|style| style.try_into_with(&custom_chat_colors))
             .transpose()?;
 
-        let universal_expire_timer =
-            NonZeroU32::new(universalExpireTimer).map(|d| Duration::from_millis(d.get().into()));
+        let universal_expire_timer = NonZeroU32::new(universalExpireTimerSeconds)
+            .map(|seconds| Duration::from_millis(1000 * u64::from(seconds.get())));
 
         Ok(Self {
             phone_number_sharing: M::value(phone_number_sharing),
@@ -382,6 +393,7 @@ mod test {
                         FAKE_CUSTOM_COLOR_ID.0,
                     )),
                     wallpaper: None,
+                    dimWallpaperInDarkMode: true,
                     special_fields: Default::default(),
                 })
                 .into(),
@@ -395,6 +407,8 @@ mod test {
     const FAKE_USERNAME_LINK_ENTROPY: [u8; USERNAME_LINK_ENTROPY_SIZE] = [12; 32];
     const FAKE_USERNAME_SERVER_ID: Uuid = Uuid::from_bytes([10; 16]);
     const FAKE_CUSTOM_COLOR_ID: CustomColorId = proto::chat_style::CustomChatColor::TEST_ID;
+    static FAKE_CUSTOM_COLOR: Lazy<Arc<CustomChatColor>> =
+        Lazy::new(|| Arc::new(CustomChatColor::from_proto_test_data()));
 
     #[test]
     fn account_data_custom_colors_ordering() {
@@ -418,22 +432,17 @@ mod test {
         assert_ne!(with_new_id, with_reversed_ids);
     }
 
-    #[test]
-    fn valid_account_data() {
-        static FAKE_CUSTOM_COLOR: Lazy<Arc<CustomChatColor>> =
-            Lazy::new(|| Arc::new(CustomChatColor::from_proto_test_data()));
-
-        assert_eq!(
-            proto::AccountData::test_data().try_into(),
-            Ok(AccountData::<Store> {
+    impl AccountData<Store> {
+        pub(crate) fn from_proto_test_data() -> Self {
+            Self {
                 profile_key: FAKE_PROFILE_KEY,
                 username: Some(UsernameData {
                     username: Username::new("abc.123").unwrap(),
                     link: Some(UsernameLink {
                         color: proto::account_data::username_link::Color::BLUE,
                         entropy: FAKE_USERNAME_LINK_ENTROPY,
-                        server_id: FAKE_USERNAME_SERVER_ID
-                    })
+                        server_id: FAKE_USERNAME_SERVER_ID,
+                    }),
                 }),
                 given_name: "".to_string(),
                 family_name: "".to_string(),
@@ -441,7 +450,8 @@ mod test {
                     phone_number_sharing: PhoneSharing::WithEverybody,
                     default_chat_style: Some(ChatStyle {
                         wallpaper: None,
-                        bubble_color: BubbleColor::Custom(FAKE_CUSTOM_COLOR.clone())
+                        bubble_color: BubbleColor::Custom(FAKE_CUSTOM_COLOR.clone()),
+                        dim_wallpaper_in_dark_mode: true,
                     }),
                     read_receipts: false,
                     sealed_sender_indicators: false,
@@ -468,8 +478,16 @@ mod test {
                     manually_canceled: false,
                 }),
                 donation_subscription: None,
-            })
-        )
+            }
+        }
+    }
+
+    #[test]
+    fn valid_account_data() {
+        assert_eq!(
+            proto::AccountData::test_data().try_into(),
+            Ok(AccountData::from_proto_test_data())
+        );
     }
 
     fn invalid_profile_key(target: &mut proto::AccountData) {

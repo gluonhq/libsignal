@@ -8,36 +8,39 @@ use derive_where::derive_where;
 use itertools::Itertools as _;
 
 use crate::backup::method::{Contains, Lookup};
-use crate::backup::{ReferencedTypes, TryFromWith, TryIntoWith as _};
+use crate::backup::{serialize, ReferencedTypes, TryFromWith, TryIntoWith as _};
 use crate::proto::backup as proto;
 
+#[derive(serde::Serialize)]
 #[derive_where(Debug)]
 #[cfg_attr(test, derive_where(PartialEq; M::CustomColorReference: PartialEq))]
 pub struct ChatStyle<M: ReferencedTypes> {
     pub wallpaper: Option<Wallpaper>,
     pub bubble_color: BubbleColor<M::CustomColorReference>,
+    pub dim_wallpaper_in_dark_mode: bool,
 }
 
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize)]
 #[cfg_attr(test, derive(PartialEq))]
 pub enum Wallpaper {
     Preset(WallpaperPreset),
     Photo,
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, serde::Serialize)]
 #[cfg_attr(test, derive(PartialEq))]
-pub struct Color(#[allow(unused)] u32);
+#[serde(transparent)]
+pub struct Color(u32);
 
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize)]
 #[cfg_attr(test, derive(PartialEq))]
 pub struct WallpaperPreset {
     /// Guaranteed to not be [`proto::chat_style::WallpaperPreset::UNKNOWN_WALLPAPER_PRESET`].
-    #[allow(unused)]
+    #[serde(serialize_with = "serialize::enum_as_string")]
     enum_value: proto::chat_style::WallpaperPreset,
 }
 
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize)]
 #[cfg_attr(test, derive(PartialEq))]
 pub enum BubbleColor<CustomColor> {
     Preset(BubbleColorPreset),
@@ -45,7 +48,7 @@ pub enum BubbleColor<CustomColor> {
     Auto,
 }
 
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize)]
 #[cfg_attr(test, derive(PartialEq))]
 pub struct BubbleGradientColor {
     pub color: Color,
@@ -54,18 +57,19 @@ pub struct BubbleGradientColor {
     position: f32,
 }
 
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize)]
 #[cfg_attr(test, derive(PartialEq))]
 pub struct BubbleColorPreset {
     /// Guaranteed to not be [`proto::chat_style::BubbleColorPreset::UNKNOWN_BUBBLE_COLOR_PRESET`].
     #[allow(unused)]
+    #[serde(serialize_with = "serialize::enum_as_string")]
     enum_value: proto::chat_style::BubbleColorPreset,
 }
 
-#[derive(Copy, Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, Hash, PartialEq, serde::Serialize)]
 pub struct CustomColorId(pub(crate) u32);
 
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize)]
 #[cfg_attr(test, derive(PartialEq))]
 pub enum CustomChatColor {
     Gradient {
@@ -81,6 +85,7 @@ pub enum CustomChatColor {
 ///
 /// Uses a `Vec` internally since the list is expected to be small.
 #[derive_where(Debug, Default)]
+#[derive(serde::Serialize)]
 #[cfg_attr(test, derive_where(PartialEq; M::CustomColorData: PartialEq))]
 pub struct CustomColorMap<M: ReferencedTypes>(Vec<(CustomColorId, M::CustomColorData)>);
 
@@ -150,6 +155,7 @@ impl<C: Lookup<CustomColorId, M::CustomColorReference>, M: ReferencedTypes>
         let proto::ChatStyle {
             wallpaper,
             bubbleColor,
+            dimWallpaperInDarkMode,
             special_fields: _,
         } = value;
 
@@ -162,6 +168,7 @@ impl<C: Lookup<CustomColorId, M::CustomColorReference>, M: ReferencedTypes>
         Ok(Self {
             wallpaper,
             bubble_color,
+            dim_wallpaper_in_dark_mode: dimWallpaperInDarkMode,
         })
     }
 }
@@ -364,6 +371,7 @@ mod test {
                 bubbleColor: Some(proto::chat_style::BubbleColor::AutoBubbleColor(
                     Default::default(),
                 )),
+                dimWallpaperInDarkMode: true,
                 special_fields: Default::default(),
             }
         }
@@ -414,6 +422,7 @@ mod test {
                     enum_value: proto::chat_style::WallpaperPreset::GRADIENT_AQUA
                 })),
                 bubble_color: BubbleColor::Auto,
+                dim_wallpaper_in_dark_mode: true,
             })
         )
     }

@@ -16,6 +16,7 @@ use zkgroup::{GroupMasterKeyBytes, ProfileKeyBytes};
 use crate::backup::call::{CallLink, CallLinkError};
 use crate::backup::frame::RecipientId;
 use crate::backup::method::{LookupPair, Method, Store, ValidateOnly};
+use crate::backup::serialize::{self, SerializeOrder, UnorderedList};
 use crate::backup::time::Timestamp;
 use crate::backup::{ReferencedTypes, TryFromWith, TryIntoWith};
 use crate::proto::backup as proto;
@@ -44,8 +45,6 @@ pub enum RecipientError {
     InvalidCallLink(#[from] CallLinkError),
     /// contact has invalid username
     InvalidContactUsername,
-    /// contact is registered but has unregistered timestamp
-    UnregisteredAtForRegisteredContact,
     /// DistributionList.item is a oneof but is empty
     DistributionListItemMissing,
     /// distribution list member {0:?} is unknown
@@ -66,7 +65,7 @@ pub struct MinimalRecipientData(DestinationKind);
 ///
 /// This keeps the full data in memory behind a [`Arc`] so it can be cheaply
 /// cloned when referenced by later frames.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize)]
 pub struct FullRecipientData(Arc<Destination<Store>>);
 
 #[derive_where(Debug)]
@@ -78,7 +77,7 @@ pub struct FullRecipientData(Arc<Destination<Store>>);
         M::Value<CallLink>: PartialEq
     )
 )]
-#[derive(strum::EnumDiscriminants)]
+#[derive(serde::Serialize, strum::EnumDiscriminants)]
 #[strum_discriminants(name(DestinationKind))]
 pub enum Destination<M: Method + ReferencedTypes> {
     Contact(M::Value<ContactData>),
@@ -95,16 +94,19 @@ impl AsRef<DestinationKind> for DestinationKind {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize)]
 #[cfg_attr(test, derive(PartialEq))]
 pub struct ContactData {
+    #[serde(serialize_with = "serialize::optional_service_id_as_string")]
     pub aci: Option<Aci>,
+    #[serde(serialize_with = "serialize::optional_service_id_as_string")]
     pub pni: Option<Pni>,
     pub profile_key: Option<ProfileKeyBytes>,
     pub username: Option<String>,
     pub registration: Registration,
     pub e164: Option<u64>,
     pub blocked: bool,
+    #[serde(serialize_with = "serialize::enum_as_string")]
     pub visibility: proto::contact::Visibility,
     pub profile_sharing: bool,
     pub profile_given_name: Option<String>,
@@ -112,17 +114,19 @@ pub struct ContactData {
     pub hide_story: bool,
 }
 
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize)]
 #[cfg_attr(test, derive(PartialEq))]
 pub struct GroupData {
     pub master_key: GroupMasterKeyBytes,
     pub whitelisted: bool,
     pub hide_story: bool,
+    #[serde(serialize_with = "serialize::enum_as_string")]
     pub story_send_mode: proto::group::StorySendMode,
+    #[serde(serialize_with = "serialize::optional_proto_message_as_bytes")]
     pub snapshot: Option<Box<proto::group::GroupSnapshot>>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize)]
 #[cfg_attr(test, derive(PartialEq))]
 pub enum DistributionListItem<Recipient> {
     Deleted {
@@ -134,18 +138,19 @@ pub enum DistributionListItem<Recipient> {
         name: String,
         allow_replies: bool,
         privacy_mode: PrivacyMode,
-        members: Vec<Recipient>,
+        #[serde(bound(serialize = "Recipient: serde::Serialize + SerializeOrder"))]
+        members: UnorderedList<Recipient>,
     },
 }
 
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize)]
 #[cfg_attr(test, derive(PartialEq))]
 pub enum Registration {
     NotRegistered { unregistered_at: Option<Timestamp> },
     Registered,
 }
 
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize)]
 #[cfg_attr(test, derive(PartialEq))]
 pub enum PrivacyMode {
     OnlyWith,
@@ -155,6 +160,13 @@ pub enum PrivacyMode {
 
 impl AsRef<DestinationKind> for MinimalRecipientData {
     fn as_ref(&self) -> &DestinationKind {
+        &self.0
+    }
+}
+
+impl std::ops::Deref for FullRecipientData {
+    type Target = Destination<Store>;
+    fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
@@ -759,7 +771,7 @@ mod test {
                 privacy_mode: PrivacyMode::AllExcept,
                 name: "".to_owned(),
                 allow_replies: false,
-                members: vec![CONTACT_RECIPIENT.clone()]
+                members: vec![CONTACT_RECIPIENT.clone()].into()
             }))
         );
     }

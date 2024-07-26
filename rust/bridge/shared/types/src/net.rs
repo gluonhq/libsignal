@@ -4,9 +4,12 @@
 //
 
 use crate::*;
+
 use aes_gcm_siv::aead::rand_core::CryptoRngCore;
 use async_trait::async_trait;
+use futures_util::future::join3;
 use http::uri::PathAndQuery;
+
 use libsignal_net::auth::Auth;
 use libsignal_net::enclave::{
     Cdsi, EnclaveEndpoint, EnclaveEndpointConnection, EnclaveKind, Nitro, PpssSetup, Sgx, Tpm2Snp,
@@ -20,10 +23,10 @@ use libsignal_net::infra::tcp_ssl::{
 };
 use libsignal_net::infra::{make_ws_config, EndpointConnection};
 use libsignal_net::svr::SvrConnection;
-use libsignal_net::svr3::{
-    Error, OpaqueMaskedShareSet, Svr3Client as Svr3ClientTrait, Svr3Connect,
-};
+use libsignal_net::svr3::traits::*;
+use libsignal_net::svr3::{Error, OpaqueMaskedShareSet};
 use libsignal_net::timeouts::ONE_ROUTE_CONNECTION_TIMEOUT;
+use libsignal_net::utils::ObservableEvent;
 use libsignal_svr3::EvaluationResult;
 use std::marker::PhantomData;
 use std::num::{NonZeroU16, NonZeroU32};
@@ -61,6 +64,7 @@ pub struct ConnectionManager {
         EnclaveEndpointConnection<Tpm2Snp, MultiRouteConnectionManager>,
     ),
     transport_connector: std::sync::Mutex<TcpSslConnector>,
+    network_change_event: ObservableEvent,
 }
 
 impl RefUnwindSafe for ConnectionManager {}
@@ -68,8 +72,11 @@ impl RefUnwindSafe for ConnectionManager {}
 impl ConnectionManager {
     pub fn new(environment: Environment, user_agent: String) -> Self {
         log::info!("Initializing connection manager for {}...", &environment);
-        let dns_resolver =
-            DnsResolver::new_with_static_fallback(environment.env().static_fallback());
+        let network_change_event = ObservableEvent::new();
+        let dns_resolver = DnsResolver::new_with_static_fallback(
+            environment.env().static_fallback(),
+            &network_change_event,
+        );
         let transport_connector =
             std::sync::Mutex::new(TcpSslDirectConnector::new(dns_resolver).into());
         let chat_endpoint =
@@ -93,6 +100,7 @@ impl ConnectionManager {
                 Self::endpoint_connection(environment.env().svr3.tpm2snp(), &user_agent),
             ),
             transport_connector,
+            network_change_event,
         }
     }
 
@@ -151,6 +159,10 @@ impl ConnectionManager {
         let params = add_user_agent_header(params, user_agent);
         EnclaveEndpointConnection::new_multi(endpoint, params, ONE_ROUTE_CONNECTION_TIMEOUT)
     }
+
+    pub fn network_changed(&self) {
+        self.network_change_event.fire()
+    }
 }
 
 bridge_as_handle!(ConnectionManager);
@@ -198,28 +210,25 @@ impl<'a> Svr3Connect for Svr3Client<'a, CurrentVersion> {
     type Stream = TcpSslConnectorStream;
     type Env = Svr3Env<'static>;
 
-    async fn connect(
-        &self,
-    ) -> Result<<Self::Env as PpssSetup<Self::Stream>>::Connections, libsignal_net::enclave::Error>
-    {
+    async fn connect(&self) -> <Self::Env as PpssSetup<Self::Stream>>::ConnectionResults {
         let ConnectionManager {
             svr3: (sgx, nitro, tpm2snp),
             transport_connector,
             ..
         } = &self.connection_manager;
         let transport_connector = transport_connector.lock().expect("not poisoned").clone();
-        let sgx =
-            SvrConnection::connect(self.auth.clone(), sgx, transport_connector.clone()).await?;
-        let nitro =
-            SvrConnection::connect(self.auth.clone(), nitro, transport_connector.clone()).await?;
-        let tpm2snp =
-            SvrConnection::connect(self.auth.clone(), tpm2snp, transport_connector).await?;
-        Ok((sgx, nitro, tpm2snp))
+        let (sgx, nitro, tpm2snp) = join3(
+            SvrConnection::connect(self.auth.clone(), sgx, transport_connector.clone()),
+            SvrConnection::connect(self.auth.clone(), nitro, transport_connector.clone()),
+            SvrConnection::connect(self.auth.clone(), tpm2snp, transport_connector),
+        )
+        .await;
+        (sgx, nitro, tpm2snp)
     }
 }
 
 #[async_trait]
-impl<'a> Svr3ClientTrait for Svr3Client<'a, PreviousVersion> {
+impl<'a> Backup for Svr3Client<'a, PreviousVersion> {
     async fn backup(
         &self,
         _password: &str,
@@ -229,7 +238,10 @@ impl<'a> Svr3ClientTrait for Svr3Client<'a, PreviousVersion> {
     ) -> Result<OpaqueMaskedShareSet, Error> {
         empty_env::backup().await
     }
+}
 
+#[async_trait]
+impl<'a> Restore for Svr3Client<'a, PreviousVersion> {
     async fn restore(
         &self,
         _password: &str,
@@ -238,11 +250,17 @@ impl<'a> Svr3ClientTrait for Svr3Client<'a, PreviousVersion> {
     ) -> Result<EvaluationResult, Error> {
         empty_env::restore().await
     }
+}
 
+#[async_trait]
+impl<'a> Remove for Svr3Client<'a, PreviousVersion> {
     async fn remove(&self) -> Result<(), Error> {
         empty_env::remove().await
     }
+}
 
+#[async_trait]
+impl<'a> Query for Svr3Client<'a, PreviousVersion> {
     async fn query(&self) -> Result<u32, Error> {
         empty_env::query().await
     }
@@ -251,7 +269,7 @@ impl<'a> Svr3ClientTrait for Svr3Client<'a, PreviousVersion> {
 // These functions define the behavior of the empty `PreviousVersion`
 // when there is no migration going on.
 // When there _is_ migration both current and previous clients should instead
-// implement `Svr3Connect` and use the blanket implementation of `Svr3Client`.
+// implement `Svr3Connect` and use the blanket implementations of the traits.
 mod empty_env {
     use super::*;
 
