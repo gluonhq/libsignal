@@ -4,6 +4,7 @@
 * [Synced version from upstream](#synced-version-from-upstream)
    * [Introduction](#introduction-1)
    * [Syncing with upstream](#syncing-with-upstream)
+   * [Publishing a new snapshot](#publishing-a-new-snapshot)
 * [Experimental components](#experimental-components)
    * [Introduction](#introduction-2)
    * [Build process](#build-process)
@@ -44,6 +45,14 @@ To keep the branch up-to-date with upstream, you can use the github website:
 See [Syncing a fork](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/working-with-forks/syncing-a-fork) on the github docs for more detailed options on how to sync a
 fork.
 
+### Publishing a new snapshot
+
+The steps for publishing a new snapshot are:
+
+1. Check that you have the latest changes from the upstream repository
+2. Trigger the workflow: [Upload Java libraries to Sonatype](https://github.com/gluonhq/libsignal/actions/workflows/jni_artifacts.yml)
+   by selecting `Run workflow` from the dropdown and then select the branch `main-upstream` for the `Use workflow from` dropdown.
+
 ## Experimental components
 
 ### Introduction
@@ -66,7 +75,7 @@ The Rust code is compiled into a native shared library for the following platfor
 * mac x64 and aarch64
 * windows x64
 
-## Build process
+### Build process
 
 Everything is built from a Gradle project that is located in the `java` directory. Running a
 build locally consists of the following steps:
@@ -82,7 +91,7 @@ build locally consists of the following steps:
     1. One that contains the java classes
     2. One that contains the native shared library targeted for the current platform
 
-## Producing a new full release
+### Producing a new full release
 
 We use Github Actions to create a release by using the workflow `jni_artifacts.yml`. This
 workflow is triggered manually. The workflow is split into two jobs. The first job generates the
@@ -102,7 +111,7 @@ The steps for building a new release are:
 by selecting `Run workflow` from the dropdown and then select the tag for the `Use workflow from`
 dropdown.
 
-## Syncing with upstream
+### Syncing with upstream
 
 This is the process for syncing with a specific release from the upstream repository:
 
