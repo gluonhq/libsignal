@@ -1,31 +1,60 @@
 # Gluon version of libsignal
 
-* [Introduction](#introduction)
+* [Motivation](#motivation)
+* [Simple synchronization via Jenkins](#simple-synchronization-via-jenkins)
 * [Synced version from upstream](#synced-version-from-upstream)
-   * [Introduction](#introduction-1)
+   * [Introduction](#introduction)
    * [Syncing with upstream](#syncing-with-upstream)
    * [Publishing a new snapshot](#publishing-a-new-snapshot)
 * [Experimental components](#experimental-components)
-   * [Introduction](#introduction-2)
+   * [Introduction](#introduction-1)
    * [Build process](#build-process)
    * [Producing a new full release](#producing-a-new-full-release)
    * [Syncing with upstream](#syncing-with-upstream-1)
 
-## Introduction
+## Motivation
 
+Signal builds and publishes their own version of libsignal client (maven GAV coordinate `org.signal.libsignal:libsignal-client`).
+There are several reasons why we want to publish a Gluon version of this artifact.
+
+1. _Artifact Size_ they publish one artifact that contains the shared native libraries for all supported platforms,
+   resulting in a very large jar file. To reduce the ultimate application size of Wave, we publish one artifact per platform.
+2. _Supported Platforms_ Signal currently builds libsignal client for the following platforms: windows x64, macOS x64 and
+   aarch64 and linux x64. To be able to run Wave on other platforms, we have added builds to support this. The only platform
+   we added for now is linux aarch64 to be able to run it on a raspberry pi.
+3. _Extending Functionality_ in the past, we added custom code for researching purposes. Think of our investigation into gRPC,
+   ECH and QUIC for example. We had to add custom code into libsignal, which requires a custom build of the artifacts.
+
+We currently provide three different ways to publish a Gluon version of libsignal:
 The Gluon fork of [libsignal](https://github.com/signalapp/libsignal) currently contains two
 components:
 
-* Inside branch `main-upstream`: a plain synced branch with changes from main upstream
-* Inside branch `main`: experimental components in rust
+* simple synchronization via a jenkins script
+* branch `main-upstream`: a plain synced branch with changes from main upstream
+* branch `main`: experimental components in rust
+
+## Simple synchronization via Jenkins
+
+The simplest sync will download the artifact that was published by Signal, rebundle it and publish it to the Gluon nexus
+repository. This addresses the _Artifact Size_ issue, by publishing one artifact per platform. Currently, each artifact
+contains the corresponding shared native library with all the classes.
+
+Use the following jenkins job to execute the sync: https://ci.lodgon.com:1443/job/libsignal-deployer/
+
+The job takes two parameters:
+
+* LIBSIGNAL_VERSION: this is the version from Signal that we want to sync into the Gluon nexus repository, i.e. `0.74.1`
+* GLUON_VERSION_SUFFIX: this suffix is appended to the libsignal version, i.e. `gluon-1`. The final version will in this
+  case become `0.74.1-gluon-1`.
 
 ## Synced version from upstream
 
 ### Introduction
 
-The branch `main-upstream` contains no code changes. It contains the latest changes from the
-`main` branch of the upstream repository and makes it available as a snapshot build into the Gluon
-nexus snapshot repository: https://nexus.gluonhq.com/nexus/content/repositories/public-snapshots/org/signal/libsignal-client/head-SNAPSHOT/
+The branch `main-upstream` contains no code changes. The only extra is that we enable a build for the platform linux aarch64.
+This addresses the _Supported Platforms_ issue. It contains the latest changes from the `main` branch of the upstream
+repository and makes it available as a snapshot build into the Gluon nexus snapshot repository:
+https://nexus.gluonhq.com/nexus/content/repositories/public-snapshots/org/signal/libsignal-client/head-SNAPSHOT/
 
 We build the native library for the following platforms:
 
